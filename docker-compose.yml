@@ -1,0 +1,15 @@
+services:
+  reminder:
+    build: .
+    image: telegram-reminder:latest
+    container_name: telegram-reminder
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./message.json:/app/message.json:ro
+      - reminder-data:/app/data
+
+volumes:
+  reminder-data:
