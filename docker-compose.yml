@@ -1,7 +1,7 @@
 services:
   reminder:
-    build: .
-    image: telegram-reminder:latest
+    image: ghcr.io/rdog49/reminder_telegram_bot:latest
+    pull_policy: always
     container_name: telegram-reminder
     init: true
     restart: unless-stopped
