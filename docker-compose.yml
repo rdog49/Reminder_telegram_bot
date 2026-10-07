@@ -5,6 +5,8 @@ services:
     container_name: telegram-reminder
     init: true
     restart: unless-stopped
+    security_opt:
+      - apparmor=unconfined
     env_file:
       - .env
     volumes:

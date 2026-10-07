@@ -26,12 +26,22 @@ sudo systemctl enable --now docker
 
 Репозиторий на сервер клонировать не нужно. Код бота уже внутри образа. На сервере нужен только каталог с тремя файлами: `docker-compose.yml`, `.env` и `message.json`. Образ скачает `docker compose pull`.
 
+Все команды ниже выполняются на сервере в терминале. Если редактора `nano` нет, поставьте его: `sudo apt update && sudo apt install -y nano`.
+
+Создайте каталог и перейдите в него:
+
 ```bash
-mkdir -p /opt/telegram-reminder
+sudo mkdir -p /opt/telegram-reminder
 cd /opt/telegram-reminder
 ```
 
-Создайте `docker-compose.yml`:
+Откройте пустой `docker-compose.yml`:
+
+```bash
+sudo nano docker-compose.yml
+```
+
+Вставьте в открытый файл этот текст целиком. Вставка в терминале — правая кнопка мыши или `Ctrl+Shift+V`.
 
 ```yaml
 services:
@@ -41,6 +51,8 @@ services:
     container_name: telegram-reminder
     init: true
     restart: unless-stopped
+    security_opt:
+      - apparmor=unconfined
     env_file:
       - .env
     volumes:
@@ -51,7 +63,15 @@ volumes:
   reminder-data:
 ```
 
-Создайте `.env` в этом каталоге:
+Сохраните файл: `Ctrl+O`, затем `Enter`. Закройте редактор: `Ctrl+X`.
+
+Откройте пустой `.env`:
+
+```bash
+sudo nano .env
+```
+
+Вставьте свои значения. `123456:ABC...` замените на токен от BotFather, `-1001234567890` — на id группы. Для UTC+6 часовой пояс `Asia/Omsk`.
 
 ```env
 BOT_TOKEN=123456:ABC...
@@ -62,10 +82,18 @@ SEND_HOURS=19,20,21
 
 - `BOT_TOKEN` — токен от BotFather.
 - `CHAT_ID` — id группы.
-- `TZ` — часовой пояс группы, имя из базы IANA. Для UTC+6 это `Asia/Omsk`.
+- `TZ` — часовой пояс группы, имя из базы IANA.
 - `SEND_HOURS` — часы отправки через запятую. Для этого бота: `19,20,21`.
 
-Создайте `message.json` в этом же каталоге до первого запуска. Если файла нет, Docker создаст на его месте каталог, и бот не увидит текст.
+Снова `Ctrl+O`, `Enter`, `Ctrl+X`.
+
+`message.json` нужен до первого запуска. Если файла нет, Docker создаст на его месте каталог, и бот не увидит текст. Откройте его:
+
+```bash
+sudo nano message.json
+```
+
+Русский текст в `nano` с клавиатуры сервера обычно не набирается. Напишите сообщение на своём компьютере, скопируйте и вставьте в открытый `nano` правой кнопкой мыши или `Ctrl+Shift+V`. Файл выглядит так:
 
 ```json
 {
@@ -73,20 +101,46 @@ SEND_HOURS=19,20,21
 }
 ```
 
-Необязательное поле `parse_mode` (`HTML` или `Markdown`) включает разметку Telegram.
+Если вставка тоже превращается в знаки вопроса, закройте `nano` через `Ctrl+X` и проверьте кодировку сессии:
+
+```bash
+locale
+```
+
+В строке `LANG` должно быть что-то вроде `en_US.UTF-8` или `ru_RU.UTF-8`. Если там `C` или `POSIX`, включите UTF-8, выйдите из SSH и зайдите снова:
+
+```bash
+sudo apt update
+sudo apt install -y locales
+sudo locale-gen en_US.UTF-8
+sudo update-locale LANG=en_US.UTF-8
+```
+
+После повторного входа снова откройте файл командой `sudo nano message.json` и вставьте текст ещё раз.
+
+Необязательное поле `parse_mode` (`HTML` или `Markdown`) включает разметку Telegram. Тогда файл выглядит так:
+
+```json
+{
+  "text": "Текст напоминания",
+  "parse_mode": "HTML"
+}
+```
+
+Снова `Ctrl+O`, `Enter`, `Ctrl+X`.
 
 Запуск:
 
 ```bash
-docker compose pull
-docker compose up -d
+sudo docker compose pull
+sudo docker compose up -d
 ```
 
 Проверка:
 
 ```bash
-docker compose ps
-docker compose logs -f
+sudo docker compose ps
+sudo docker compose logs -f
 ```
 
 В логе при старте есть часовой пояс и время следующего слота. Выход из логов: `Ctrl+C`, контейнер при этом продолжает работать.
@@ -101,16 +155,25 @@ docker compose logs -f
 
 ```bash
 cd /opt/telegram-reminder
-docker compose pull
-docker compose up -d
+sudo docker compose pull
+sudo docker compose up -d
 ```
 
-Текст в `message.json` бот читает заново при каждой отправке. Для смены текста достаточно сохранить файл.
-
-После правки `.env` контейнер нужно пересоздать:
+Текст в `message.json` бот читает заново при каждой отправке. Чтобы сменить его:
 
 ```bash
-docker compose up -d --force-recreate
+cd /opt/telegram-reminder
+sudo nano message.json
+```
+
+Поправьте текст, сохраните через `Ctrl+O`, `Enter` и выйдите через `Ctrl+X`. Перезапуск контейнера для этого не нужен.
+
+После правки `.env` контейнер нужно пересоздать. Откройте файл, сохраните и выйдите так же, как при создании:
+
+```bash
+cd /opt/telegram-reminder
+sudo nano .env
+sudo docker compose up -d --force-recreate
 ```
 
 ## Остановка
@@ -118,7 +181,8 @@ docker compose up -d --force-recreate
 Остановить контейнер и оставить историю слотов:
 
 ```bash
-docker compose down
+cd /opt/telegram-reminder
+sudo docker compose down
 ```
 
-Том `reminder-data` при этом сохраняется. Следующий `docker compose up -d` продолжит с теми же слотами.
+Том `reminder-data` при этом сохраняется. Следующий `sudo docker compose up -d` продолжит с теми же слотами.
