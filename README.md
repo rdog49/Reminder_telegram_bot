@@ -24,9 +24,31 @@ sudo systemctl enable --now docker
 
 ## Поднять на сервере
 
+Репозиторий на сервер клонировать не нужно. Код бота уже внутри образа. На сервере нужен только каталог с тремя файлами: `docker-compose.yml`, `.env` и `message.json`. Образ скачает `docker compose pull`.
+
 ```bash
-git clone https://github.com/rdog49/Reminder_telegram_bot.git telegram-reminder
-cd telegram-reminder
+mkdir -p /opt/telegram-reminder
+cd /opt/telegram-reminder
+```
+
+Создайте `docker-compose.yml`:
+
+```yaml
+services:
+  reminder:
+    image: ghcr.io/rdog49/reminder_telegram_bot:latest
+    pull_policy: always
+    container_name: telegram-reminder
+    init: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./message.json:/app/message.json:ro
+      - reminder-data:/app/data
+
+volumes:
+  reminder-data:
 ```
 
 Создайте `.env` в этом каталоге:
@@ -75,16 +97,13 @@ docker compose logs -f
 
 ## Обновление
 
-Новая версия кода попадает на сервер только после зелёной сборки в `main`. На сервере:
+Новая версия кода попадает в реестр после зелёной сборки в `main`. На сервере достаточно скачать новый образ и пересоздать контейнер:
 
 ```bash
-cd telegram-reminder
-git pull
+cd /opt/telegram-reminder
 docker compose pull
 docker compose up -d
 ```
-
-`git pull` нужен, чтобы подтянуть изменения `docker-compose.yml`. Образ подтягивает `docker compose pull`.
 
 Текст в `message.json` бот читает заново при каждой отправке. Для смены текста достаточно сохранить файл.
 
