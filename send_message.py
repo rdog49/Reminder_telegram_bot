@@ -1,9 +1,7 @@
 import json
 import logging
 import os
-import signal
 import sys
-import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -17,7 +15,6 @@ load_dotenv(BASE_DIR / ".env")
 MESSAGE_PATH = Path(os.getenv("MESSAGE_PATH", str(BASE_DIR / "message.json")))
 STATE_PATH = Path(os.getenv("STATE_PATH", str(BASE_DIR / "data" / "sent.json")))
 DEFAULT_HOURS = (19, 20, 21)
-CHECK_INTERVAL_SECONDS = 30
 STATE_KEEP_DAYS = 7
 
 logging.basicConfig(
@@ -26,13 +23,6 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger("reminder")
-
-stop = threading.Event()
-
-
-def _request_stop(signum, _frame) -> None:
-    log.info("Получен сигнал %s, останавливаюсь", signum)
-    stop.set()
 
 
 def load_settings() -> tuple[str, str, ZoneInfo, tuple[int, ...]]:
@@ -43,7 +33,7 @@ def load_settings() -> tuple[str, str, ZoneInfo, tuple[int, ...]]:
     if not token or not chat_id:
         raise SystemExit("В .env нужны BOT_TOKEN и CHAT_ID")
     if not tz_name:
-        raise SystemExit("В .env нужен TZ, например Asia/Omsk")
+        raise SystemExit("В .env нужен TZ, например Asia/Bishkek")
 
     try:
         tz = ZoneInfo(tz_name)
@@ -115,16 +105,6 @@ def slot_key(now: datetime) -> str:
     return f"{now.date().isoformat()}T{now.hour:02d}"
 
 
-def next_slot(now: datetime, hours: tuple[int, ...]) -> datetime:
-    ordered = tuple(sorted(set(hours)))
-    for hour in ordered:
-        candidate = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-        if candidate > now:
-            return candidate
-    tomorrow = now + timedelta(days=1)
-    return tomorrow.replace(hour=ordered[0], minute=0, second=0, microsecond=0)
-
-
 def send_message(token: str, chat_id: str, message: dict) -> None:
     response = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
@@ -139,58 +119,28 @@ def send_message(token: str, chat_id: str, message: dict) -> None:
         raise RuntimeError(f"Ошибка Telegram: {data}")
 
 
-def tick(token: str, chat_id: str, tz: ZoneInfo, hours: tuple[int, ...], sent: set[str]) -> None:
-    now = datetime.now(tz)
-    if now.hour not in hours:
-        return
-
-    key = slot_key(now)
-    if key in sent:
-        return
-
-    message = read_message(MESSAGE_PATH)
-    send_message(token, chat_id, message)
-    sent.add(key)
-    try:
-        save_sent(STATE_PATH, sent, now)
-    except OSError as exc:
-        log.error("Слот %s отправлен, но состояние не записалось: %s", key, exc)
-    log.info("Сообщение отправлено, слот %s", key)
-
-
 def main() -> None:
-    signal.signal(signal.SIGTERM, _request_stop)
-    signal.signal(signal.SIGINT, _request_stop)
-
     token, chat_id, tz, hours = load_settings()
     sent = load_sent(STATE_PATH)
+    
     now = datetime.now(tz)
-    hours_label = ",".join(str(hour) for hour in hours)
-    current = slot_key(now)
-    if now.hour in hours and current not in sent:
-        log.info(
-            "Запущен. TZ=%s, часы=%s, слот %s ещё не отправлен",
-            tz.key,
-            hours_label,
-            current,
-        )
-    else:
-        upcoming = next_slot(now, hours)
-        log.info(
-            "Запущен. TZ=%s, часы=%s, следующий слот=%s",
-            tz.key,
-            hours_label,
-            upcoming.strftime("%Y-%m-%d %H:%M"),
-        )
+    key = slot_key(now)
+    
+    log.info("Запуск по расписанию для слота %s (TZ: %s)", key, tz.key)
 
-    while not stop.is_set():
-        try:
-            tick(token, chat_id, tz, hours, sent)
-        except (RuntimeError, requests.RequestException) as exc:
-            log.error("Отправка не удалась, повторю в этом часе: %s", exc)
-        stop.wait(CHECK_INTERVAL_SECONDS)
+    if key in sent:
+        log.info("Слот %s уже был отправлен ранее. Пропуск.", key)
+        return
 
-    log.info("Остановлен")
+    try:
+        message = read_message(MESSAGE_PATH)
+        send_message(token, chat_id, message)
+        sent.add(key)
+        save_sent(STATE_PATH, sent, now)
+        log.info("Сообщение успешно отправлено для слота %s", key)
+    except (RuntimeError, requests.RequestException) as exc:
+        log.error("Ошибка при отправке: %s", exc)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
