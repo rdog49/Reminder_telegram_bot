@@ -11,6 +11,7 @@ services:
       - .env
     volumes:
       - ./message.json:/app/message.json:ro
+      - ./users_map.json:/app/users_map.json:ro
       - reminder-data:/app/data
 
 volumes:

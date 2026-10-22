@@ -1,5 +1,6 @@
 .env
 message.json
+users_map.json
 data/
 __pycache__/
 *.pyc

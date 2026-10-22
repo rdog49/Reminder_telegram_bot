@@ -3,6 +3,7 @@
 .env
 .env.*
 message.json
+users_map.json
 data
 README.md
 **/__pycache__
